@@ -681,6 +681,82 @@ ssize_t scte35_splice_info_section_unpackFrom(struct scte35_splice_info_section_
 	return byteCount;
 }
 
+int64_t scte35_splice_info_section_get_pts(uint8_t *section, unsigned int byteCount)
+{
+	int ret;
+	int64_t pts_time;
+
+	if (*(section + 0) != SCTE35_TABLE_ID)
+		return -1;
+
+	struct scte35_splice_info_section_s *s = calloc(1, sizeof(*s));
+	ret = scte35_splice_info_section_unpackFrom(s, section, byteCount);
+	if (ret < 0) {
+		free(s);
+		return -1;
+	}
+
+	if (s->splice_command_type == SCTE35_COMMAND_TYPE__SPLICE_INSERT) {
+		if (s->splice_insert.splice_event_cancel_indicator == 0) {
+			if ((s->splice_insert.program_splice_flag == 1) && (s->splice_insert.splice_immediate_flag == 0)) {
+				if (s->splice_insert.splice_time.time_specified_flag == 1) {
+					pts_time = s->splice_insert.splice_time.pts_time;
+					scte35_splice_info_section_free(s);
+					return pts_time;
+				}
+			}
+		}
+
+	} else
+	if (s->splice_command_type == SCTE35_COMMAND_TYPE__TIME_SIGNAL) {
+		if (s->time_signal.time_specified_flag == 1) {
+				pts_time = s->time_signal.pts_time;
+				scte35_splice_info_section_free(s);
+				return pts_time;
+		}
+	}
+
+	scte35_splice_info_section_free(s);
+
+	return -1;
+
+}
+
+void scte35_splice_info_section_set_pts(uint8_t *section, unsigned int byteCount, uint64_t target_pts)
+{
+	int ret;
+
+	if (*(section + 0) != SCTE35_TABLE_ID) {
+		return;
+	}
+
+	struct scte35_splice_info_section_s *s = calloc(1, sizeof(*s));
+	ret = scte35_splice_info_section_unpackFrom(s, section, byteCount);
+	if (ret < 0) {
+		free(s);
+		return;
+	}
+
+	if (s->splice_command_type == SCTE35_COMMAND_TYPE__SPLICE_INSERT) {
+		if (s->splice_insert.splice_event_cancel_indicator == 0) {
+			if ((s->splice_insert.program_splice_flag == 1) && (s->splice_insert.splice_immediate_flag == 0)) {
+				if (s->splice_insert.splice_time.time_specified_flag == 1) {
+					s->splice_insert.splice_time.pts_time = target_pts;
+				}
+			}
+		}
+
+	} else
+	if (s->splice_command_type == SCTE35_COMMAND_TYPE__TIME_SIGNAL) {
+		if (s->time_signal.time_specified_flag == 1) {
+				s->time_signal.pts_time = target_pts;
+		}
+	}
+
+	ret = scte35_splice_info_section_packTo(s, section, 4096);
+	scte35_splice_info_section_free(s);
+}
+
 struct scte35_splice_info_section_s *scte35_splice_info_section_parse(uint8_t *section, unsigned int byteCount)
 {
 	int ret;
